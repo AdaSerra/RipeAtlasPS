@@ -29,46 +29,58 @@ function Get-ProbeResult {
         [Parameter(Mandatory = $false)]
         [int]$msmId
     )
-    
+   # $header = "Authorization: Bearer OAuth2 Token"
     # 1. Automatic Discovery Logic
     if (-not $msmId) {
         Write-Host "No msmId provided, fetching latest measurement for probe $probeId..." -ForegroundColor Yellow
     
-        $urlLatest = "https://atlas.ripe.net/api/v2/probes/$probeId/measurements/?status=1&page_size=1"
+        $urlLatest = "https://atlas.ripe.net/api/v2/probes/$probeId/measurements"
         try {
             # Assumes Invoke-RipeApi is available in the module scope
-            $latest = Invoke-RipeApi -Url $urlLatest
-            if ($null -eq $latest -or $latest.count -eq 0) {
+            $latest = Invoke-WebRequest $urlLatest
+            if ($null -eq $latest -or ($latest.Content | ConvertFrom-Json).count -eq 0) {
                 Write-Warning "No active measurements found for probe $probeId."
-                return $false
+                return 
             }
-            $msmId = $latest.results[0].id
+            $msmId = ($latest.Content | ConvertFrom-Json).results[0].id
             Write-Host "Latest measurement identified: $msmId" -ForegroundColor Cyan
+            #Write-Host ($latest.Content | ConvertFrom-Json).results[0] | Format-List
         }
         catch {
             Write-Error "Could not retrieve latest measurement for probe $probeId : $($_.Exception.Message)"
-            return $false
+            return 
         }
     }
 
     # 2. Fetch Result Data
-    $url = "https://atlas.ripe.net/api/v2/measurements/$msmId/latest/?probe_ids=$probeId"
+    $url = "https://atlas.ripe.net/api/v2/measurements/$msmId/results/?probe_ids=$probeId"
     try {
         # Using Invoke-RestMethod for the specific results call
         $data = Invoke-RestMethod -Uri $url -ErrorAction Stop
         
+        if ($data -is [System.Collections.IEnumerable]) {
+            $data = $data[0]
+        }
+
         if ($null -eq $data) {
             Write-Warning "No result data returned for msmId $msmId / probe $probeId."
-            return $false
+            return
         }
 
         # 1. Check error
         # error can be in $data.error o $data.result.error
-        $errorMessage = if ($data.error) { $data.error } elseif ($data.result.error) { $data.result.error } else { $null }
+        $errorMessage = $null
+
+        if ($data.error) {
+            $errorMessage = $data.error
+        }
+        elseif ($data.result -isnot [System.Collections.IEnumerable] -and $data.result.error) {
+            $errorMessage = $data.result.error
+        }
 
         if ($errorMessage) {
             Write-Host "`n[!] PROBE ERROR: $errorMessage" -ForegroundColor Red
-            # Se c'è un errore, mostriamo comunque i metadati minimi e usciamo
+            
             $data | Select-Object msm_id, prb_id, dst_name, proto, timestamp | Format-List
             return $false
         }
@@ -105,6 +117,9 @@ function Get-ProbeResult {
             }
     
             "ping" {
+
+    
+
                 Write-Host "`nPing Statistics:" -ForegroundColor Cyan
                 [PSCustomObject]@{
                     Sent     = if ($null -ne $data.sent) { $data.sent } else { $result.sent }
@@ -179,13 +194,13 @@ function Get-ProbeResult {
             default {
                 Write-Warning "Unknown or unhandled measurement type: $type"
                 $result | Format-List
-                return $false
+                return
             }
         }
-        return $true
+        return 
     }
     catch {
         Write-Error "Failed to retrieve results: $($_.Exception.Message)"
-        return $false
+        return 
     }
 }

@@ -25,7 +25,7 @@ function Get-RipeProbes {
         Defaults to 1.
 
     .EXAMPLE
-        Get-RipeProbes -asn 1299
+        Get-RipeProbes 1299
         Retrieves all currently connected probes within AS1299 (Telia).
 
     .EXAMPLE
@@ -69,8 +69,8 @@ function Get-RipeProbes {
             Type       = $_.type
             Country    = $_.country_code
             # City      = if ($_.city) { $_.city } else { "N/A" }
-            Coords     = "$($_.geometry.coordinates[1]),$($_.geometry.coordinates[0])"
-            Status    = if ($statusNames.ContainsKey($_.status.id)) { $statusNames[$_.status.id] } else { $_.status.name }
+            Coords      = if ($null -ne $_.geometry?.coordinates) {"$($_.geometry.coordinates[1]),$($_.geometry.coordinates[0])"} else {"N/A"}
+            Status      = if ($statusNames.ContainsKey($_.status.id)) { $statusNames[$_.status.id] } else { $_.status.name }
             PrefixV4    = $_.prefix_v4
             AddressV4  = $_.address_v4
             AddressV6  = if ($_.address_v6) { $_.address_v6 } else { "N/A" }
